@@ -17,7 +17,14 @@ type TypedPointer struct {
 // TypedPointerOf gets the typed pointer of an arbitrary object.
 // Note: value must be addressable or else this function will panic.
 func TypedPointerOf(value interface{}) TypedPointer {
-	return typedPointerOfRV(reflect.ValueOf(value))
+	return TypedPointerOfRV(reflect.ValueOf(value))
+}
+
+func TypedPointerOfRV(rv reflect.Value) TypedPointer {
+	return TypedPointer{
+		Type:    rv.Type(),
+		Pointer: rv.Pointer(),
+	}
 }
 
 // FindDuplicatePointers walks an object and its contents looking for pointer
@@ -99,7 +106,7 @@ func isSearchableKind(kind reflect.Kind) bool {
 }
 
 func checkPtrAlreadyFound(value reflect.Value, foundPtrs map[TypedPointer]bool) (alreadyExists bool) {
-	ptr := typedPointerOfRV(value)
+	ptr := TypedPointerOfRV(value)
 	if _, ok := foundPtrs[ptr]; ok {
 		foundPtrs[ptr] = true
 		return true
@@ -107,11 +114,4 @@ func checkPtrAlreadyFound(value reflect.Value, foundPtrs map[TypedPointer]bool) 
 
 	foundPtrs[ptr] = false
 	return false
-}
-
-func typedPointerOfRV(rv reflect.Value) TypedPointer {
-	return TypedPointer{
-		Type:    rv.Type(),
-		Pointer: rv.Pointer(),
-	}
 }
