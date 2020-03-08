@@ -60,7 +60,7 @@ func findDuplicatePtrsInValue(value reflect.Value, foundPtrs map[TypedPointer]bo
 	case reflect.Map:
 		if !value.IsNil() && !checkPtrAlreadyFound(value, foundPtrs) {
 			if isSearchableKind(value.Type().Elem().Kind()) {
-				iter := value.MapRange()
+				iter := mapRange(value)
 				for iter.Next() {
 					findDuplicatePtrsInValue(iter.Value(), foundPtrs)
 				}
