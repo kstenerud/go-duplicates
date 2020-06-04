@@ -40,6 +40,10 @@ func assertDuplicates(t *testing.T, value interface{}, expectedDuplicates ...int
 	}
 }
 
+func TestZeroValue(t *testing.T) {
+	FindDuplicatePointers(nil)
+}
+
 func TestDuplicatesBasicTypes(t *testing.T) {
 	var nullIntf interface{}
 	var nullPtr *int

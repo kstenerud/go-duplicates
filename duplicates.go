@@ -20,6 +20,8 @@ func TypedPointerOf(value interface{}) TypedPointer {
 	return TypedPointerOfRV(reflect.ValueOf(value))
 }
 
+// TypedPointerOf gets the typed pointer of the object that value references.
+// Note: value must be addressable or else this function will panic.
 func TypedPointerOfRV(rv reflect.Value) TypedPointer {
 	return TypedPointer{
 		Type:    rv.Type(),
@@ -45,49 +47,69 @@ func FindDuplicatePointers(value interface{}) (duplicatePtrs map[TypedPointer]bo
 func findDuplicatePtrsInValue(value reflect.Value, foundPtrs map[TypedPointer]bool) {
 	switch value.Kind() {
 	case reflect.Interface:
-		if !value.IsNil() {
-			value = value.Elem()
-			if isSearchableKind(value.Kind()) {
-				findDuplicatePtrsInValue(value, foundPtrs)
-			}
+		if value.IsNil() {
+			return
 		}
+		elem := value.Elem()
+		if !isSearchableKind(elem.Kind()) {
+			return
+		}
+		findDuplicatePtrsInValue(elem, foundPtrs)
 	case reflect.Ptr:
-		if !value.IsNil() && !checkPtrAlreadyFound(value, foundPtrs) {
-			if isSearchableKind(value.Type().Elem().Kind()) {
-				findDuplicatePtrsInValue(value.Elem(), foundPtrs)
-			}
+		if value.IsNil() {
+			return
 		}
+		if checkPtrAlreadyFound(value, foundPtrs) {
+			return
+		}
+		elem := value.Elem()
+		if !isSearchableKind(elem.Type().Kind()) {
+			return
+		}
+		findDuplicatePtrsInValue(elem, foundPtrs)
 	case reflect.Map:
-		if !value.IsNil() && !checkPtrAlreadyFound(value, foundPtrs) {
-			if isSearchableKind(value.Type().Elem().Kind()) {
-				iter := mapRange(value)
-				for iter.Next() {
-					findDuplicatePtrsInValue(iter.Value(), foundPtrs)
-				}
-			}
+		if value.IsNil() {
+			return
+		}
+		if checkPtrAlreadyFound(value, foundPtrs) {
+			return
+		}
+		if !isSearchableKind(value.Type().Elem().Kind()) {
+			return
+		}
+		iter := mapRange(value)
+		for iter.Next() {
+			findDuplicatePtrsInValue(iter.Value(), foundPtrs)
 		}
 	case reflect.Slice:
-		if !value.IsNil() && !checkPtrAlreadyFound(value, foundPtrs) {
-			if isSearchableKind(value.Type().Elem().Kind()) {
-				count := value.Len()
-				for i := 0; i < count; i++ {
-					findDuplicatePtrsInValue(value.Index(i), foundPtrs)
-				}
-			}
+		if value.IsNil() {
+			return
+		}
+		if checkPtrAlreadyFound(value, foundPtrs) {
+			return
+		}
+		if !isSearchableKind(value.Type().Elem().Kind()) {
+			return
+		}
+		count := value.Len()
+		for i := 0; i < count; i++ {
+			findDuplicatePtrsInValue(value.Index(i), foundPtrs)
 		}
 	case reflect.Array:
-		if isSearchableKind(value.Type().Elem().Kind()) {
-			count := value.Len()
-			for i := 0; i < count; i++ {
-				findDuplicatePtrsInValue(value.Index(i), foundPtrs)
-			}
+		if !isSearchableKind(value.Type().Elem().Kind()) {
+			return
+		}
+		count := value.Len()
+		for i := 0; i < count; i++ {
+			findDuplicatePtrsInValue(value.Index(i), foundPtrs)
 		}
 	case reflect.Struct:
 		for i := 0; i < value.NumField(); i++ {
 			field := value.Field(i)
 			if field.CanAddr() {
-				findDuplicatePtrsInValue(field.Addr(), foundPtrs)
-			} else if isSearchableKind(field.Kind()) {
+				field = field.Addr()
+			}
+			if isSearchableKind(field.Kind()) {
 				findDuplicatePtrsInValue(field, foundPtrs)
 			}
 		}
