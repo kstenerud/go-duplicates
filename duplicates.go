@@ -6,6 +6,21 @@ import (
 	"reflect"
 )
 
+// FindDuplicatePointers walks an object and its contents looking for pointer
+// values that are used multiple times, marking slices, maps, pointers, and
+// struct fields that point to the same instance of an object. Both exported and
+// unexported fields are examined and followed.
+//
+// The returned duplicatePtrs will map to true for every duplicate pointer found.
+// Non-duplicates will either not be present in the map, or will map to false.
+// Either way, duplicatePtrs[myTypedPtr] will return true if and only if
+// myTypedPtr represents a duplicate pointer.
+func FindDuplicatePointers(value interface{}) (duplicatePtrs map[TypedPointer]bool) {
+	finder := NewDuplicateFinder()
+	finder.ScanObject(value)
+	return finder.DuplicatePointers
+}
+
 // TypedPointer is a pointer value with an associated type. Typing is necessary
 // because the first field of a struct will have the same address as the struct
 // itself
@@ -29,22 +44,41 @@ func TypedPointerOfRV(rv reflect.Value) TypedPointer {
 	}
 }
 
-// FindDuplicatePointers walks an object and its contents looking for pointer
-// values that are used multiple times, marking slices, maps, pointers, and
-// struct fields that point to the same instance of an object. Both exported and
-// unexported fields are examined and followed.
-//
-// The returned duplicatePtrs will map to true for every duplicate pointer found.
-// Non-duplicates will either not be present in the map, or will map to false.
-// Either way, duplicatePtrs[myTypedPtr] will return true if and only if
-// myTypedPtr represents a duplicate pointer.
-func FindDuplicatePointers(value interface{}) (duplicatePtrs map[TypedPointer]bool) {
-	duplicatePtrs = make(map[TypedPointer]bool)
-	findDuplicatePtrsInValue(reflect.ValueOf(value), duplicatePtrs)
-	return
+// DuplicateFinder scans objects for pointers and keeps track of them so that
+// any duplicates can be found.
+type DuplicateFinder struct {
+	DuplicatePointers map[TypedPointer]bool
 }
 
-func findDuplicatePtrsInValue(value reflect.Value, foundPtrs map[TypedPointer]bool) {
+func NewDuplicateFinder() *DuplicateFinder {
+	_this := &DuplicateFinder{}
+	_this.Init()
+	return _this
+}
+
+func (_this *DuplicateFinder) Init() {
+	_this.DuplicatePointers = make(map[TypedPointer]bool)
+}
+
+// Record a pointer, returning true if it has been recorded before.
+// This method panics if the pointer's Kind is not Chan, Func, Map, Ptr, Slice,
+// or UnsafePointer.
+func (_this *DuplicateFinder) CheckPtrAlreadyFound(pointer reflect.Value) (alreadyExists bool) {
+	typedPtr := TypedPointerOfRV(pointer)
+	if _, ok := _this.DuplicatePointers[typedPtr]; ok {
+		_this.DuplicatePointers[typedPtr] = true
+		return true
+	}
+
+	_this.DuplicatePointers[typedPtr] = false
+	return false
+}
+
+func (_this *DuplicateFinder) ScanObject(object interface{}) {
+	_this.scanRV(reflect.ValueOf(object))
+}
+
+func (_this *DuplicateFinder) scanRV(value reflect.Value) {
 	switch value.Kind() {
 	case reflect.Interface:
 		if value.IsNil() {
@@ -54,24 +88,24 @@ func findDuplicatePtrsInValue(value reflect.Value, foundPtrs map[TypedPointer]bo
 		if !isSearchableKind(elem.Kind()) {
 			return
 		}
-		findDuplicatePtrsInValue(elem, foundPtrs)
+		_this.scanRV(elem)
 	case reflect.Ptr:
 		if value.IsNil() {
 			return
 		}
-		if checkPtrAlreadyFound(value, foundPtrs) {
+		if _this.CheckPtrAlreadyFound(value) {
 			return
 		}
 		elem := value.Elem()
 		if !isSearchableKind(elem.Type().Kind()) {
 			return
 		}
-		findDuplicatePtrsInValue(elem, foundPtrs)
+		_this.scanRV(elem)
 	case reflect.Map:
 		if value.IsNil() {
 			return
 		}
-		if checkPtrAlreadyFound(value, foundPtrs) {
+		if _this.CheckPtrAlreadyFound(value) {
 			return
 		}
 		if !isSearchableKind(value.Type().Elem().Kind()) {
@@ -79,13 +113,13 @@ func findDuplicatePtrsInValue(value reflect.Value, foundPtrs map[TypedPointer]bo
 		}
 		iter := mapRange(value)
 		for iter.Next() {
-			findDuplicatePtrsInValue(iter.Value(), foundPtrs)
+			_this.scanRV(iter.Value())
 		}
 	case reflect.Slice:
 		if value.IsNil() {
 			return
 		}
-		if checkPtrAlreadyFound(value, foundPtrs) {
+		if _this.CheckPtrAlreadyFound(value) {
 			return
 		}
 		if !isSearchableKind(value.Type().Elem().Kind()) {
@@ -93,7 +127,7 @@ func findDuplicatePtrsInValue(value reflect.Value, foundPtrs map[TypedPointer]bo
 		}
 		count := value.Len()
 		for i := 0; i < count; i++ {
-			findDuplicatePtrsInValue(value.Index(i), foundPtrs)
+			_this.scanRV(value.Index(i))
 		}
 	case reflect.Array:
 		if !isSearchableKind(value.Type().Elem().Kind()) {
@@ -101,7 +135,7 @@ func findDuplicatePtrsInValue(value reflect.Value, foundPtrs map[TypedPointer]bo
 		}
 		count := value.Len()
 		for i := 0; i < count; i++ {
-			findDuplicatePtrsInValue(value.Index(i), foundPtrs)
+			_this.scanRV(value.Index(i))
 		}
 	case reflect.Struct:
 		for i := 0; i < value.NumField(); i++ {
@@ -110,7 +144,7 @@ func findDuplicatePtrsInValue(value reflect.Value, foundPtrs map[TypedPointer]bo
 				field = field.Addr()
 			}
 			if isSearchableKind(field.Kind()) {
-				findDuplicatePtrsInValue(field, foundPtrs)
+				_this.scanRV(field)
 			}
 		}
 	}
@@ -125,15 +159,4 @@ const searchableKinds uint = (uint(1) << reflect.Interface) |
 
 func isSearchableKind(kind reflect.Kind) bool {
 	return searchableKinds&(uint(1)<<kind) != 0
-}
-
-func checkPtrAlreadyFound(value reflect.Value, foundPtrs map[TypedPointer]bool) (alreadyExists bool) {
-	ptr := TypedPointerOfRV(value)
-	if _, ok := foundPtrs[ptr]; ok {
-		foundPtrs[ptr] = true
-		return true
-	}
-
-	foundPtrs[ptr] = false
-	return false
 }
