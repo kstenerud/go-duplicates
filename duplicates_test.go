@@ -38,6 +38,14 @@ func assertDuplicates(t *testing.T, value interface{}, expectedDuplicates ...int
 	if len(expectedMissing) > 0 {
 		t.Errorf("Found but unexpected: %v", expectedMissing)
 	}
+
+	finder := NewDuplicateFinder()
+	finder.ScanForPointers(value)
+	for _, duplicate := range expectedDuplicates {
+		if !finder.IsDuplicatePointer(duplicate) {
+			t.Errorf("Expected duplicate %v", duplicate)
+		}
+	}
 }
 
 func TestZeroValue(t *testing.T) {
