@@ -17,6 +17,20 @@ func mapDifference(a, b map[TypedPointer]bool) (difference []TypedPointer) {
 	return
 }
 
+func assertNoDuplicates(t *testing.T, value interface{}) {
+	dups := FindDuplicatePointers(value)
+	found := false
+	for _, isDuplicate := range dups {
+		if isDuplicate {
+			found = true
+			break
+		}
+	}
+	if found {
+		t.Errorf("Found %v unexpected duplicate(s): %v", len(dups), describeDuplicates(dups))
+	}
+}
+
 func assertDuplicates(t *testing.T, value interface{}, expectedDuplicates ...interface{}) {
 	expected := make(map[TypedPointer]bool)
 	for _, dup := range expectedDuplicates {
@@ -197,6 +211,60 @@ func TestDuplicatesStruct5(t *testing.T) {
 	v.e = &v
 
 	assertDuplicates(t, &v, &v)
+}
+
+func TestDuplicatesNilPointers(t *testing.T) {
+	var p *int
+	v := []interface{}{
+		p,
+		p,
+	}
+	assertNoDuplicates(t, &v)
+}
+
+func TestDuplicatesEmptyInterfaces(t *testing.T) {
+	var p interface{}
+	v := []interface{}{
+		p,
+		p,
+	}
+	assertNoDuplicates(t, &v)
+}
+
+func TestDuplicatesEmptyStrings(t *testing.T) {
+	sl := ""
+	v := []interface{}{
+		sl,
+		sl,
+	}
+	assertNoDuplicates(t, &v)
+}
+
+func TestDuplicatesEmptySlices(t *testing.T) {
+	sl := []interface{}{}
+	v := []interface{}{
+		sl,
+		sl,
+	}
+	assertNoDuplicates(t, &v)
+}
+
+func TestDuplicatesEmptyArrays(t *testing.T) {
+	arr := [0]interface{}{}
+	v := []interface{}{
+		arr,
+		arr,
+	}
+	assertNoDuplicates(t, &v)
+}
+
+func TestDuplicatesEmptyMaps(t *testing.T) {
+	m := map[interface{}]interface{}{}
+	v := map[interface{}]interface{}{
+		1: m,
+		2: m,
+	}
+	assertNoDuplicates(t, &v)
 }
 
 type SomeStruct struct {

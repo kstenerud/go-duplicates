@@ -124,6 +124,9 @@ func (_this *DuplicateFinder) scanValue(value reflect.Value) {
 		if value.IsNil() {
 			return
 		}
+		if value.Len() == 0 {
+			return
+		}
 		if _this.RegisterPointer(value) {
 			return
 		}
@@ -138,6 +141,9 @@ func (_this *DuplicateFinder) scanValue(value reflect.Value) {
 		if value.IsNil() {
 			return
 		}
+		if value.Len() == 0 {
+			return
+		}
 		if _this.RegisterPointer(value) {
 			return
 		}
@@ -150,6 +156,9 @@ func (_this *DuplicateFinder) scanValue(value reflect.Value) {
 		}
 	case reflect.Array:
 		if !isScannableKind(value.Type().Elem().Kind()) {
+			return
+		}
+		if value.Len() == 0 {
 			return
 		}
 		count := value.Len()
